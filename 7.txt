@@ -1,0 +1,31 @@
+1. Защита от SQL InjectionОбъяснение: Мы отказались от прямой вставки переменных в текст SQL-запроса. Вместо этого используются подготовленные запросы (Prepared Statements) через PDO. Данные передаются отдельно в метод execute(), что делает невозможным изменение логики запроса злоумышленником через кавычки или спецсимволы.  Вставка из index.php:PHP$stmt = $pdo->prepare("
+    SELECT a.* FROM applications a
+    JOIN users u ON a.id = u.application_id
+    WHERE u.login = ?
+");
+$stmt->execute([$_SESSION['login']]);
+2. Защита от Cross-Site Request Forgery (CSRF)Объяснение: Для защиты от поддельных запросов с других сайтов мы генерируем уникальный токен в сессии пользователя. При отправке любой формы этот токен проверяется на сервере. Если токен отсутствует или не совпадает, запрос блокируется.  Вставка из index.php:PHP// Генерация в GET-запросе
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Проверка в POST-запросе
+if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    header('HTTP/1.1 403 Forbidden');
+    die('Ошибка безопасности: CSRF-токен не валиден.');
+}
+3. Защита от Cross-Site Scripting (XSS)Объяснение: Чтобы вредоносный скрипт не выполнился в браузере, мы применяем «Золотое правило»: фильтруем все входящие данные и экранируем все выходящие. Использование htmlspecialchars() превращает опасные теги в обычный текст.  Вставка из index.php:PHP$biography = htmlspecialchars($_POST['biography'] ?? ''); // Санитизация на входе
+$fio = trim(strip_tags($_POST['fio'] ?? ''));             // Удаление тегов
+4. Защита от Information DisclosureОбъяснение: Мы скрываем системную информацию (пути к файлам, структуру БД, логины) от пользователя. Для этого критический код обернут в блоки try-catch, которые перехватывают технические ошибки и выводят вместо них нейтральное сообщение.  Вставка из index.php:PHPtry {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
+} catch (PDOException $e) {
+    // Скрываем детали $e->getMessage()
+    die("Ошибка БД. Пожалуйста, попробуйте позже.");
+}
+5. Безопасный Include и «Белый список»Объяснение: Мы защищаемся от внедрения посторонних файлов, жестко прописывая имя подключаемого файла без использования переменных из URL. Также введена проверка данных по «белому списку» (allowed languages), чтобы в базу не попали непредусмотренные значения.  Вставка из index.php:PHP// Безопасный include
+include('form.php'); 
+
+// Проверка по белому списку
+if (in_array($lang, $allowed_languages)) { 
+    $pdo->prepare("INSERT INTO application_languages ...")->execute([$app_id, $lang]);
+}
